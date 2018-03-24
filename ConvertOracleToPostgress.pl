@@ -132,7 +132,7 @@ sub ProcessQueryVariable()
 
 sub LookCurrentFunctionAndClass() {
     $codeLine = $_[0];
-    if ( ($matchClass) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]class[ \t]([A-Za-z_][A-Za-z0-9_]*)/i)
+    if ( ($matchClass) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]class[ \t]([A-Za-z_][A-Za-z\d_]*)/i)
     {
         $CurrentClass = $matchClass;
         print("Match Class : $CurrentClass\n");
