@@ -9,6 +9,23 @@ local $NextIsFunctionName = 0;
 
 local $CurrentClass = "";
 
+local $IsInSQLQueryMode = 0;
+
+local %StatisticsOfCurrentFunction = ( 
+        "NVL" => 0,
+        "DateTime" => 0,
+        "BLOB" => 0,
+        "LOC" => 0,
+        "SQLQueryOccurence" => 0,
+        "StringBuilderOccurence" => 0,
+
+          
+                                    );
+
+local %vQueryVariables = (); 
+
+
+
 opendir my $dir, "c:/test/decathlon" or die "Cant open directory : $!";
 
 my @files = readdir $dir;
@@ -40,6 +57,7 @@ sub ProcessFile {
     foreach my $codeLine (@fileLines) {
         matchDBStuff($codeLine);       
     }
+    ProcessFinalStuffForFunction();  #Last function to process on the file 
 
 
 }
@@ -47,8 +65,47 @@ sub ProcessFile {
 sub matchDBStuff() {
     $codeLine = $_[0];
     LookCurrentFunctionAndClass($codeLine);
+    ScanSQLQueryObject($codeLine);
+    ScanUsageOfQueryObject($codeLine);    
 
-    inKeyworkList($codeLine);
+ #   inKeyworkList($codeLine);
+}
+
+sub ScanSQLQueryObject()
+{
+    $codeLine = $_[0];
+    if ( ($sqlQueryVariable) = $codeLine =~ m/^[ \t]*(?:SqlQuery){1}[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
+    {
+        $vQueryVariables{$sqlQueryVariable} = 0;
+        $IsInSQLQueryMode = 1;
+    }
+
+
+}
+
+sub ScanUsageOfQueryObject()
+{
+    $codeLine = $_[0];
+
+    if ($IsInSQLQueryMode == 1)
+    {
+        foreach my $oneVariable (keys %vQueryVariables)
+         {
+            # look for a variable usage (ex :vQuery.{something})
+            if ( ($sqlQueryVariable) = $codeLine =~ m/^[ \t]*($oneVariable)\./i)
+            {
+                if (exists ($vQueryVariables{$sqlQueryVariable}))
+                {
+                    $vQueryVariables{$sqlQueryVariable} = $vQueryVariables{$sqlQueryVariable} + 1;
+                }
+                else
+                {
+                    $vQueryVariables{$sqlQueryVariable} = 0;
+                }
+            }
+        }
+    }
+    
 }
 
 sub LookCurrentFunctionAndClass() {
@@ -60,64 +117,65 @@ sub LookCurrentFunctionAndClass() {
     } 
     else
     {
-    # match with or without static (?:[ \t]static[ \t])?
-    if ($codeLine =~ m/^[ \t]*(?:private|protected|public)+(?:[ \t]static[ \t])?[ \t]+\b\w+\b/i) 
-    {
-        $NextIsFunctionName = 1;
-        if (
-            (($matchFunctionName) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}(?:[ \t]static[ \t]){1}\b\w+\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i) 
-          ||
-            (($matchFunctionName) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]+\b\w+\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
+        # match with or without static (?:[ \t]static[ \t])?
+        if ($codeLine =~ m/^[ \t]*(?:private|protected|public)+(?:[ \t]static[ \t])?[ \t]+\b\w+\b/i) 
+        {
+            $NextIsFunctionName = 1;
+            if (
+                (($matchFunctionName) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}(?:[ \t]static[ \t]){1}\b\w+\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i) 
+            ||
+                (($matchFunctionName) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]+\b\w+\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
+            
+            )
+            {
+                ProcessFinalStuffForFunction();
+                $CurrentFunctionName = $matchFunctionName;
+                ChangeFunction();
+                $NextIsFunctionName = 0;
+            }
+        }
         
-           )
+        if ($NextIsFunctionName == 1)
         {
-            print("$codeLine\n");
-            print("Match function name : $matchFunctionName\n");
-            $CurrentFunctionName = $matchFunctionName;
-            print("$CurrentFunctionName\n");
-            $NextIsFunctionName = 0;
+            if ($codeLine =~ /^[ \t]*\b([A-Za-z_][A-Za-z\d_])\b[ \t]*\(/i)
+            {
+                $CurrentFunctionName = $1;
+                ChangeFunction();
+                $NextIsFunctionName = 0;
+            }
         }
-    }
-    
-    if ($NextIsFunctionName == 1)
-    {
-        if ($codeLine =~ /^[ \t]*\b([A-Za-z_][A-Za-z\d_])\b[ \t]*\(/i)
-        {
-            $CurrentFunctionName = $1;
-            print("$CurrentFunctionName\n");
-            $NextIsFunctionName = 0;
-        }
-    }
 
     }
-
-
-
-
 }
 
 
-sub inKeyworkList() {
 
-    my ($codeLine) = @_;
+sub ChangeFunction()
+{
 
-    my @DB_KEYWORD = ("SqlQuery", "private", "UPDATE");
+    print("New Function : $CurrentFunctionName\n");
 
 
-    my $found = 0;
+    %{$vQueryVariables} = ();
 
-    for my $KW (@DB_KEYWORD) {
-        if ($codeLine =~ /\b$KW\b/i) {
-            $found++;
-        }
+
+    $IsInSQLQueryMode = 0;
+    $StatisticsOfCurrentFunction{NVL} = 0;
+    $StatisticsOfCurrentFunction{DateTime} = 0;
+    $StatisticsOfCurrentFunction{BLOB} = 0;
+    $StatisticsOfCurrentFunction{LOC} = 0;
+    $StatisticsOfCurrentFunction{SQLQueryOccurence} = 0;
+}
+
+
+sub ProcessFinalStuffForFunction()
+{
+    print("Process Final Stuff for Current Function : $CurrentFunctionName\n");
+
+    foreach my $oneVariable (keys %vQueryVariables)
+    {
+       print(" -------------VQUERYVARIABLE COUNT : $vQueryVariables{$oneVariable}\n");
     }
-
-#    if ($found > 0 ){
-#        print("$codeLine\n");
-#    }
-
-    return 1;
-
 }
 
 
