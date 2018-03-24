@@ -10,6 +10,9 @@ local $NextIsFunctionName = 0;
 local $CurrentClass = "";
 
 local $IsInSQLQueryMode = 0;
+local $StartFunctionLine = 0;
+local $lineIndex = 0;
+
 
 local %StatisticsOfCurrentFunction = ( 
         "NVL" => 0,
@@ -55,6 +58,7 @@ sub ProcessFile {
 
     my @codeLine;
     foreach my $codeLine (@fileLines) {
+        $lineIndex++;
         matchDBStuff($codeLine);       
     }
     ProcessFinalStuffForFunction();  #Last function to process on the file 
@@ -102,15 +106,33 @@ sub ScanUsageOfQueryObject()
                 {
                     $vQueryVariables{$sqlQueryVariable} = 0;
                 }
+                ProcessQueryVariable($codeLine, $sqlQueryVariable);
             }
         }
     }
     
 }
 
+
+sub ProcessQueryVariable()
+{
+    $codeLine = $_[0];
+    $sqlVariable =  $_[1]; 
+
+    if ($codeLine =~ m/[ \s]+(?:NVL|TIMESTAMP){1}[\s]/i)
+    {
+        print ("Example of a SQLQueryVariable $sqlVariable with Specific Keyword : $codeLine");
+    }
+    
+
+
+}
+
+
+
 sub LookCurrentFunctionAndClass() {
     $codeLine = $_[0];
-    if ( ($matchClass) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]class[ \t]([A-Za-z_][A-Za-z\d_]*)/i)
+    if ( ($matchClass) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]class[ \t]([A-Za-z_][A-Za-z0-9_]*)/i)
     {
         $CurrentClass = $matchClass;
         print("Match Class : $CurrentClass\n");
@@ -122,10 +144,9 @@ sub LookCurrentFunctionAndClass() {
         {
             $NextIsFunctionName = 1;
             if (
-                (($matchFunctionName) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}(?:[ \t]static[ \t]){1}\b\w+\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i) 
+                (($matchFunctionName) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}(?:[ \t]static[ \t]){1}\b[a-zA-Z][a-zA-Z0-9<>]*\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i) 
             ||
-                (($matchFunctionName) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]+\b\w+\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
-            
+                 (($matchFunctionName) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]+\b[a-zA-Z][a-zA-Z0-9<>]*\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
             )
             {
                 ProcessFinalStuffForFunction();
@@ -153,6 +174,7 @@ sub LookCurrentFunctionAndClass() {
 sub ChangeFunction()
 {
 
+    $StartFunctionLine = $lineIndex;
     print("New Function : $CurrentFunctionName\n");
 
 
@@ -171,6 +193,7 @@ sub ChangeFunction()
 sub ProcessFinalStuffForFunction()
 {
     print("Process Final Stuff for Current Function : $CurrentFunctionName\n");
+    print("StartFunctionLine : $StartFunctionLine");
 
     foreach my $oneVariable (keys %vQueryVariables)
     {
