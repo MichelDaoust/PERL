@@ -15,18 +15,30 @@ local $lineIndex = 0;
 local $CurrentQueryVariable = "";
 
 
-local %StatisticsOfCurrentFunction = ( 
-        "NVL" => 0,
-        "DateTime" => 0,
-        "BLOB" => 0,
-        "LOC" => 0,
-        "SQLQueryOccurence" => 0,
-        "StringBuilderOccurence" => 0,
-        "COUNT" => 0,
-
-          
-                                    );
-
+local %StatisticsOfCurrentFunction = (
+        NVL  => 0,
+        NULL => 0,
+        DECODE => 0,
+        SYSDATE => 0,
+        LISTTAG => 0,
+        COUNT => 0,
+        UNION => 0,
+        MAX => 0,
+        IN => 0,
+        ESCAPE => 0,
+        ROWNUM => 0,
+        OVER => 0,
+        INSTR => 0,
+        LPAD => 0,
+        UPPER => 0,
+        SUM => 0,
+        FIRST_VALUE => 0,
+        REPLACE => 0,
+        EXISTS => 0,
+        ADD_MONTHS => 0,
+        OVERLAPS => 0
+); 
+        
 local %vQueryVariables = (); 
 local %vQuerySQL = (); 
 
@@ -91,7 +103,6 @@ sub ScanSQLQueryObject()
     if ( $codeLine =~ /(?:new){1}[ \t]+(?:SqlQuery){1}\(\"(.*)\"\)/i)
     {
         $vQuerySQL{$sqlQueryVariable} = $1;
-        print("%%%%%%%%%%%%%%%%%%%%%%%%%%%% SQL: $CurrentSQL");
     }
 
 
@@ -105,8 +116,7 @@ sub ScanUsageOfQueryObject()
 
     if ($IsInSQLQueryMode == 1)
     {
-        ScanLineWhenQueryIsON($codeLine);
-
+        ProcessAppendQuery($codeLine);
 
         foreach my $oneVariable (keys %vQueryVariables)
          {
@@ -129,30 +139,6 @@ sub ScanUsageOfQueryObject()
     
 }
 
-
-sub ScanLineWhenQueryIsON()
-{
-    $codeLine = $_[0];
-    
-    if ($codeLine =~ /\.appendQuery/i)
-    {
-   
-        ProcessAppendQuery($codeLine);
-   
-        $StatisticsOfCurrentFunction{"SQLQueryOccurence"} = $StatisticsOfCurrentFunction{"SQLQueryOccurence"} + 1;  
-    }
-    if ($codeLine =~ /NVL/i)
-    {
-     #   print("SCANLINE : $codeLine\n");
-        $StatisticsOfCurrentFunction{"NVL"} = $StatisticsOfCurrentFunction{"NVL"} + 1;  
-    }
-    if ($codeLine =~ /count/i)
-    {
-        $StatisticsOfCurrentFunction{"COUNT"} = $StatisticsOfCurrentFunction{"COUNT"} + 1;  
-        
-    }
-    
-}
 
 
 sub ProcessAppendQuery()
@@ -258,22 +244,17 @@ sub ChangeFunction()
         delete $vQuerySQL{$key};
     }
 
-    $CurrentSQL = "";
-    $CurrentQueryVariables = "";
+    foreach my $key (keys %vQueryVariables) {
+        $vQueryVariables{$key} = 0;
+    }
+
     $IsInSQLQueryMode = 0;
-    $StatisticsOfCurrentFunction{NVL} = 0;
-    $StatisticsOfCurrentFunction{DateTime} = 0;
-    $StatisticsOfCurrentFunction{BLOB} = 0;
-    $StatisticsOfCurrentFunction{LOC} = 0;
-    $StatisticsOfCurrentFunction{SQLQueryOccurence} = 0;
-    $StatisticsOfCurrentFunction{COUNT} = 0;
 }
 
 
 sub ProcessFinalStuffForFunction()
 {
     print("Process Final Stuff for Current Function : $CurrentFunctionName\n");
-    print("StartFunctionLine : $StartFunctionLine\n");
 
     foreach my $oneVariable (keys %vQueryVariables)
     {
@@ -282,10 +263,29 @@ sub ProcessFinalStuffForFunction()
 
     foreach my $oneSQL (keys %vQuerySQL)
     {
-       print(" ********************************SQL : $vQuerySQL{$oneSQL}\n");
+        ScanSQLTEXT($vQuerySQL{$oneSQL});
     }
 
 
 }
+
+
+sub ScanSQLTEXT()
+{
+    $SQLTEXT = $_[0];
+    
+    my $occ;
+    foreach my $statistic (keys %StatisticsOfCurrentFunction)
+    {
+        $occ = () = $SQLTEXT =~ /$statistic/gi;
+        $StatisticsOfCurrentFunction{$statistic} = $occ;
+        print ("STATS : $statistic : $occ\n");
+    }
+
+    
+     
+
+}
+
 
 
