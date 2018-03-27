@@ -6,6 +6,7 @@ use Text::CSV;
 
 local $CurrentFilename = "";
 local $CurrentFunctionName = "";
+local $CurrentFunctionNameCodeLine = "";
 
 local $NextIsFunctionName = 0;
 
@@ -15,6 +16,13 @@ local $IsInSQLQueryMode = 0;
 local $StartFunctionLine = 0;
 local $lineIndex = 0;
 local $CurrentQueryVariable = "";
+local $csv;
+local $outCSV;
+local $fm;
+local $CSVfilename;
+local $outMapping;
+local $outMappingName;
+
 
 
 local %StatisticsOfCurrentFunction = (
@@ -37,7 +45,10 @@ local %StatisticsOfCurrentFunction = (
         REPLACE => 0,
         ADD_MONTHS => 0,
         OVERLAPS => 0,
-        PARTITION => 0
+        PARTITION => 0,
+        SELECT => 0,
+        DELETE => 0,
+        UPDATE => 0
 ); 
         
 local %vQueryVariables = (); 
@@ -50,6 +61,7 @@ opendir my $dir, "c:/test/decathlon" or die "Cant open directory : $!";
 my @files = readdir $dir;
 closedir $dir;
 
+PrepareReport();
 
 foreach my $file (@files)
 {
@@ -61,10 +73,47 @@ foreach my $file (@files)
     }
 }
 
+CloseReport();
+
+
+
+sub PrepareReport() {
+    $CSVfilename = "c:\\test\\decathlon\\output2.csv";
+    my @myField = ("filename",  "className",  "functionName", "VAR NB", "NVL", "NULL", "DECODE", "SYSDATE", "LISTTAG", "COUNT", "UNION", "MAX", "ESCAPE", "ROWNUM", "OVER", "INSTR", "LPAD", "UPPER", "SUM", "FIRST_VALUE", "REPLACE", "ADD_MONTHS", "OVERLAPS", "PARTITION", "SELECT", "DELETE", "UPDATE", "NOT IN", "NOT EXISTS", "CHAR(1)", "NB_CHAR");
+    open $outCSV, ">:encoding(utf8)", $CSVfilename or die "failed to create $CSVfilename: $!";
+    $csv = Text::CSV->new();
+    $csv->eol ("\n");
+    my (@heading) = @myField;
+    $csv->print($outCSV, \@heading);    # Array ref!
+
+    $outMappingName = "c:\\test\\decathlon\\outMapping.txt";
+    open $outMapping, ">:encoding(utf8)", $outMappingName or die "failed to create $outMappingName: $!";
+
+
+}
+
+sub CloseReport()
+{
+  
+   if ($outCSV) {
+    close $outCSV or die "failed to close $CSVfilename: $!";     
+   }
+
+   if ($outCSV) {
+    close $outMapping or die "failed to close $outMappingName: $!";     
+   }
+
+}
+
 sub ProcessFile {
+    $lineIndex = 0;
+    $CurrentFunctionName = "";
+    $CurrentFunctionNameCodeLine = "";
+    $CurrentClass = "";
+
     my ($file) = @_;
 
-    open (my $fm, "<", "c:\\test\\decathlon\\$file") or die "Can t open file $file";
+    open ($fm, "<", "c:\\test\\decathlon\\$file") or die "Can t open file $file";
 
     my @fileLines = (<$fm>);
 
@@ -75,20 +124,18 @@ sub ProcessFile {
     my @codeLine;
     foreach my $codeLine (@fileLines) {
         $lineIndex++;
-        matchDBStuff($codeLine);       
+        IterateLines($codeLine);       
     }
-    ProcessFinalStuffForFunction();  #Last function to process on the file 
+    ProcessFinalStuffForFunction();
 
 
 }
 
-sub matchDBStuff() {
+sub IterateLines() {
     $codeLine = $_[0];
     LookCurrentFunctionAndClass($codeLine);
     ScanSQLQueryObject($codeLine);
     ScanUsageOfQueryObject($codeLine);    
-
- #   inKeyworkList($codeLine);
 }
 
 sub ScanSQLQueryObject()
@@ -98,6 +145,7 @@ sub ScanSQLQueryObject()
     {
         $vQueryVariables{$sqlQueryVariable} = 0;
         $IsInSQLQueryMode = 1;
+        print $outMapping "$CurrentClass\.$CurrentFunctionName  :  $CurrentFunctionNameCodeLine\n";
     }
 
     #Scan for Constructor
@@ -105,7 +153,6 @@ sub ScanSQLQueryObject()
     {
         $vQuerySQL{$sqlQueryVariable} = $1;
     }
-
 
 }
 
@@ -133,7 +180,6 @@ sub ScanUsageOfQueryObject()
                     $vQueryVariables{$sqlQueryVariable} = 0;
                 }
                 $CurrentQueryVariable = $sqlQueryVariable;
-                ProcessQueryVariable($codeLine, $sqlQueryVariable);
             }
         }
     }
@@ -149,9 +195,10 @@ sub ProcessAppendQuery()
     if ($codeLine =~ /\.appendQuery\("(.*)"\);/i)
     {
         my $SQL = $1; 
-        if ($codeLine =~ /([A-Za-z_][A-Za-z\d_]*)\.appendQuery/i)
+        if (($sqlVar) = $codeLine =~ /([A-Za-z_][A-Za-z\d_]*)\.appendQuery/i)
         {
-            $vQuerySQL{$1}  .= $SQL;
+
+            $vQuerySQL{$sqlVar}  .= $SQL;
         }
         else
         {
@@ -165,26 +212,13 @@ sub ProcessAppendQuery()
 }
 
 
-sub ProcessQueryVariable()
-{
-    $codeLine = $_[0];
-    $sqlVariable =  $_[1]; 
-
-    if ($codeLine =~ m/[ \s]+(?:NVL|TIMESTAMP){1}[\s]/i)
-    {
-        print ("Example of a SQLQueryVariable $sqlVariable with Specific Keyword : $codeLine");
-    }
-    
-
-
-}
-
-
 
 sub LookCurrentFunctionAndClass() {
     $codeLine = $_[0];
     if ( ($matchClass) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]class[ \t]([A-Za-z_][A-Za-z\d_]*)/i)
     {
+        $functionName = "";
+        $CurrentFunctionNameCodeLine = "";
         $CurrentClass = $matchClass;
         print("Match Class : $CurrentClass\n");
         $NextIsFunctionName = 0;
@@ -196,24 +230,25 @@ sub LookCurrentFunctionAndClass() {
         {
             $matchFunctionName = "";
             if (  #get
-                (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}[ \t]+\b([a-zA-Z][a-zA-Z0-9\][<>]*)\b[ \t]+(?:get){1}/i)
+                (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}[ \t]+(\b[a-zA-Z][a-zA-Z0-9\]\[<>]*\b)[ \t]+get/i)
             ||
                 #static 
                 (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}(?:[ \t]static[ \t]){1}\b[a-zA-Z][a-zA-Z0-9\][<>]*\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i) 
             ||
-                 (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}[ \t]+\b[a-zA-Z][a-zA-Z0-9\][<>]*\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
+                 (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}[ \t]+\b[a-zA-Z][a-zA-Z0-9\][<>]?\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
 
             )
             {
                 ProcessFinalStuffForFunction();
-                $CurrentFunctionName = $matchFunctionName;
+                $CurrentFunctionName = "function$lineIndex" ;
+                $CurrentFunctionNameCodeLine = $codeLine;
                 ChangeFunction();
                 $NextIsFunctionName = 0;
             }
             else
             {
               #not completed function
-              $NextIsFunctionName = "";
+              $NextIsFunctionName = 0;
             }
         }
         
@@ -222,7 +257,8 @@ sub LookCurrentFunctionAndClass() {
             if (($matchFunctionName) = $codeLine =~ /(\b[A-Za-z_][A-Za-z\d_]\b)/i)
             {
               ProcessFinalStuffForFunction();
-              $CurrentFunctionName = $1;
+              $CurrentFunctionName =  "function$lineIndex"; #  "\"$codeLine\"" ;
+              $CurrentFunctionNameCodeLine = $codeLine;
               ChangeFunction();
               $NextIsFunctionName = 0;
 
@@ -240,6 +276,37 @@ sub ChangeFunction()
     $StartFunctionLine = $lineIndex;
     print("New Function : $CurrentFunctionName\n");
 
+}
+
+
+sub ProcessFinalStuffForFunction()
+{
+    print("Process Final Stuff for Current Function : $CurrentFunctionName\n");
+
+
+    @array=keys(%vQuerySQL);
+    $size=@array;
+
+    if ($size > 0)
+    {
+        foreach my $oneSQL (keys %vQuerySQL)
+        {
+            ScanSQLTEXT($vQuerySQL{$oneSQL});
+            print $outMapping "$vQuerySQL{$oneSQL}\n";
+        }
+        
+        WriteToReport(0);
+        
+    }
+    else
+    {
+        @arrayQuery=keys(%vQueryVariables);
+        $size=@arrayQuery;
+        
+        WriteToReport($size);
+
+    }
+
     foreach my $key (keys %vQueryVariables) {
         delete $vQueryVariables{$key};
     }
@@ -253,59 +320,27 @@ sub ChangeFunction()
     }
 
     $IsInSQLQueryMode = 0;
-}
+    
 
-
-sub ProcessFinalStuffForFunction()
-{
-    print("Process Final Stuff for Current Function : $CurrentFunctionName\n");
-
-
-    @array=keys(%vQuerySQL);
-    $size=$#array;
-
-    if ($size > 0)
-    {
-        foreach my $oneSQL (keys %vQuerySQL)
-        {
-            ScanSQLTEXT($vQuerySQL{$oneSQL});
-        }
-    }
-    else
-    {
-        foreach my $oneVariable (keys %vQueryVariables)
-        {
-            $StatisticsOfCurrentFunction{"VAR:$oneVariable"} = $vQueryVariables{$oneVariable};
-        }
-    }
-
-    ProcessReport();
 
 }
 
-sub ProcessReport()
+sub WriteToReport()
 {
-    my $filename = "c:\\test\\decathlon\\output2.csv";
-    my @myField = ("filename",  "className",  "functionName", "NVL", "NULL", "DECODE", "SYSDATE", "LISTTAG", "COUNT", "UNION", "MAX", "ESCAPE", "ROWNUM", "OVER", "INSTR", "LPAD", "UPPER", "SUM", "FIRST_VALUE", "REPLACE", "NOTEXISTS", "ADD_MONTHS", "OVERLAPS", "PARTITION");
-
-    open my $fh, ">:encoding(utf8)", $filename or die "failed to create $filename: $!";
-    $csv = Text::CSV->new();
-    $csv->eol ("\n");
-    my (@heading) = @myField;
-    $csv->print($fh, \@heading);    # Array ref!
+    $varCount = $_[0];
 
 
     my(@datarow) = (
      $CurrentFilename,
      $CurrentClass,
      $CurrentFunctionName,
+     $varCount,
      $StatisticsOfCurrentFunction{NVL},
      $StatisticsOfCurrentFunction{NULL},
      $StatisticsOfCurrentFunction{DECODE},
      $StatisticsOfCurrentFunction{SYSDATE},
      $StatisticsOfCurrentFunction{LISTTAG},
      $StatisticsOfCurrentFunction{COUNT},
-     $StatisticsOfCurrentFunction{NVL},
      $StatisticsOfCurrentFunction{UNION},
      $StatisticsOfCurrentFunction{MAX},
      $StatisticsOfCurrentFunction{ESCAPE},
@@ -317,15 +352,27 @@ sub ProcessReport()
      $StatisticsOfCurrentFunction{SUM},
      $StatisticsOfCurrentFunction{FIRST_VALUE},
      $StatisticsOfCurrentFunction{REPLACE},
-     $StatisticsOfCurrentFunction{NOTEXISTS},
      $StatisticsOfCurrentFunction{ADD_MONTHS},
      $StatisticsOfCurrentFunction{OVERLAPS},
-     $StatisticsOfCurrentFunction{PARTITION}
+     $StatisticsOfCurrentFunction{PARTITION},
+     $StatisticsOfCurrentFunction{SELECT},
+     $StatisticsOfCurrentFunction{DELETE},
+     $StatisticsOfCurrentFunction{UPDATE},
+
+     $StatisticsOfCurrentFunction{NOT_IN},
+     $StatisticsOfCurrentFunction{NOT_EXISTS},
+     $StatisticsOfCurrentFunction{CHAR1},
+     $StatisticsOfCurrentFunction{NBCHAR},
+     
+     
+
+
       );
 
-    $csv->print($fh, \@datarow);    # Array ref!
-  
-   close $fh or die "failed to close $filename: $!";     
+    if ($outCSV)
+    {
+        $csv->print($outCSV, \@datarow);    # Array ref!
+    }
     
 }
 
@@ -336,19 +383,18 @@ sub ScanSQLTEXT()
     my $occ;
     foreach my $statistic (keys %StatisticsOfCurrentFunction)
     {
-        $occ = () = $SQLTEXT =~ /$statistic/gi;
+        $occ = () = $SQLTEXT =~ /\b$statistic\b/gi;
         $StatisticsOfCurrentFunction{$statistic} = $occ;
-        print ("STATS : $statistic : $occ\n");
     }
 
     $occ = () = $SQLTEXT =~ /NOT IN/gi;
     $StatisticsOfCurrentFunction{NOT_IN} = $occ;
+    $occ = () = $SQLTEXT =~ /NOT EXISTS/gi;
+    $StatisticsOfCurrentFunction{NOT_EXISTS} = $occ;
     $occ = () = $SQLTEXT =~ /char\(1\)/gi;
     $StatisticsOfCurrentFunction{CHAR1} = $occ;
-    
 
-    
-     
+    $StatisticsOfCurrentFunction{NBCHAR} = length($SQLTEXT);
 
 }
 
