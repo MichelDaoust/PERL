@@ -3,6 +3,7 @@ use lib 'C:\Perl64\cpan\build\Class-CSV-1.03-8oD7_P';
 use warnings;
 use List::Util 1.33 'any';
 use Text::CSV;
+use File::Find;
 
 local $CurrentFilename = "";
 local $CurrentFunctionName = "";
@@ -22,7 +23,56 @@ local $fm;
 local $CSVfilename;
 local $outMapping;
 local $outMappingName;
+local $PossibleHardCodedSQL = 0;
 
+
+
+local %StartDir = (
+     adminFlow => "E:\\Decathlon\\adminflow",
+     adminprod => "E:\\Decathlon\\adminprod",
+     commonprod => "E:\\decathlon\\commonprod\\src",
+     commonscore => "E:\\decathlon\\commonscore\\src",
+     edbflow => "E:\\decathlon\\edbflow",
+     apihpsaw => "E:\\decathlon\\api-hpsaw\\src",
+     edbprod => "E:\\decathlon\\edbprod\\src",
+     extprod => "E:\\decathlon\\extprod\\src",
+     fdtprod => "E:\\decathlon\\fdtprod\\src",
+     flexv4 => "E:\\decathlon\\flexv4",
+     interfaceofferfacade => "E:\\decathlon\\interface-offerfacade",
+     mrgprod => "E:\\decathlon\\mrgprod\\src",
+     order => "E:\\decathlon\\order\\src",
+     orderflow => "E:\\decathlon\\orderflow\\src",
+     pdpconso => "E:\\decathlon\\pdpconso\\src",
+     pilotflow => "E:\\decathlon\\pilotflow\\src",
+     pricing => "E:\\decathlon\\pricing\\src",
+     prodalert => "E:\\decathlon\\prodalert\\src",
+     prodcomapi => "E:\\decathlon\\prodcom-api\\src",
+     prodflow => "E:\\decathlon\\prodflow\\src",
+     prodtower => "E:\\decathlon\\prodtower\\src",
+     prodwsc => "E:\\decathlon\\prodwsc\\src",
+     refprod => "E:\\decathlon\\refprod\\src",
+     scorecapa => "E:\\decathlon\\scorecapa\\src",
+     scorecapac => "E:\\decathlon\\scorecapac\\src",
+     scoreflow => "E:\\decathlon\\scoreflow\\src",
+     scoreflowc => "E:\\decathlon\\scoreflowc\\src",
+     scorepdp => "E:\\decathlon\\scorepdp\\src",
+     scorepdpc => "E:\\decathlon\\scorepdpc\\src",
+     start => "E:\\decathlon\\start\\src",
+     stockflow => "E:\\decathlon\\stockflow\\src",
+     stockprod => "E:\\decathlon\\stockprod\\src"
+
+
+     
+
+
+     
+
+
+
+
+
+
+);
 
 
 local %StatisticsOfCurrentFunction = (
@@ -48,7 +98,11 @@ local %StatisticsOfCurrentFunction = (
         PARTITION => 0,
         SELECT => 0,
         DELETE => 0,
-        UPDATE => 0
+        UPDATE => 0,
+        DUAL => 0,
+        ROWID => 0,
+        NEXTVAL => 0,
+
 ); 
         
 local %vQueryVariables = (); 
@@ -56,64 +110,19 @@ local %vQuerySQL = ();
 
 
 
-opendir my $dir, "c:/test/decathlon" or die "Cant open directory : $!";
-
-my @files = readdir $dir;
-closedir $dir;
-
-PrepareReport();
-
-foreach my $file (@files)
-{
-
-    if ($file =~ m/\.java$/)
-    {
-        $CurrentFilename = "$file";
-        ProcessFile($CurrentFilename);
-    }
-}
-
-CloseReport();
 
 
-
-sub PrepareReport() {
-    $CSVfilename = "c:\\test\\decathlon\\output2.csv";
-    my @myField = ("filename",  "className",  "functionName", "VAR NB", "NVL", "NULL", "DECODE", "SYSDATE", "LISTTAG", "COUNT", "UNION", "MAX", "ESCAPE", "ROWNUM", "OVER", "INSTR", "LPAD", "UPPER", "SUM", "FIRST_VALUE", "REPLACE", "ADD_MONTHS", "OVERLAPS", "PARTITION", "SELECT", "DELETE", "UPDATE", "NOT IN", "NOT EXISTS", "CHAR(1)", "NB_CHAR");
-    open $outCSV, ">:encoding(utf8)", $CSVfilename or die "failed to create $CSVfilename: $!";
-    $csv = Text::CSV->new();
-    $csv->eol ("\n");
-    my (@heading) = @myField;
-    $csv->print($outCSV, \@heading);    # Array ref!
-
-    $outMappingName = "c:\\test\\decathlon\\outMapping.txt";
-    open $outMapping, ">:encoding(utf8)", $outMappingName or die "failed to create $outMappingName: $!";
-
-
-}
-
-sub CloseReport()
-{
-  
-   if ($outCSV) {
-    close $outCSV or die "failed to close $CSVfilename: $!";     
-   }
-
-   if ($outCSV) {
-    close $outMapping or die "failed to close $outMappingName: $!";     
-   }
-
-}
 
 sub ProcessFile {
     $lineIndex = 0;
     $CurrentFunctionName = "";
     $CurrentFunctionNameCodeLine = "";
     $CurrentClass = "";
+    $PossibleHardCodedSQL = 0;
 
-    my ($file) = @_;
+    my ($file) = $_[0];
 
-    open ($fm, "<", "c:\\test\\decathlon\\$file") or die "Can t open file $file";
+    open ($fm, "<", "$file") or die "Can t open file $file";
 
     my @fileLines = (<$fm>);
 
@@ -143,9 +152,9 @@ sub ScanSQLQueryObject()
     $codeLine = $_[0];
     if ( ($sqlQueryVariable) = $codeLine =~ /^[ \t]*(?:final)?[ \t]*(?:SqlQuery){1}[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
     {
-        $vQueryVariables{$sqlQueryVariable} = 0;
+        $vQueryVariables{$sqlQueryVariable} = 1;
         $IsInSQLQueryMode = 1;
-        print $outMapping "$CurrentClass\.$CurrentFunctionName  :  $CurrentFunctionNameCodeLine\n";
+        print $outMapping "\n\n$CurrentClass\.$CurrentFunctionName  :  $CurrentFunctionNameCodeLine\n";
     }
 
     #Scan for Constructor
@@ -153,6 +162,12 @@ sub ScanSQLQueryObject()
     {
         $vQuerySQL{$sqlQueryVariable} = $1;
     }
+
+    if  ($codeLine =~ /(?:new){1}[ \t]+(?:SqlQuery){1}\([A-Z][A-Z0-9_]+\)/i) 
+    {
+        $PossibleHardCodedSQL = 1;
+    }  
+    
 
 }
 
@@ -169,11 +184,18 @@ sub ScanUsageOfQueryObject()
         foreach my $oneVariable (keys %vQueryVariables)
          {
             # look for a variable usage (ex :vQuery.{something})
-            if ( ($sqlQueryVariable) = $codeLine =~ /[ \t]*($oneVariable)\./i)
+            if (  ($sqlQueryVariable) = $codeLine =~ /[ \t]*($oneVariable)\./i)
             {
+                if  ($codeLine =~ /[ \t]*($oneVariable)\.\([A-Z][A-Z0-9_]*/i) 
+                {
+                    $StatisticsOfCurrentFunction{POSSIBLE_HARDCODE_SQL} = 1;
+                }  
+
+
                 if (exists ($vQueryVariables{$sqlQueryVariable}))
                 {
-                    $vQueryVariables{$sqlQueryVariable} = $vQueryVariables{$sqlQueryVariable} + 1;
+                    $occ = () = $codeLine =~ /[ \t]*($oneVariable)\./gi;
+                    $vQueryVariables{$sqlQueryVariable} = $vQueryVariables{$sqlQueryVariable} + $occ;
                 }
                 else
                 {
@@ -192,7 +214,11 @@ sub ProcessAppendQuery()
 {
     $codeLine = $_[0];
 
-    if ($codeLine =~ /\.appendQuery\("(.*)"\);/i)
+    if (
+        ($codeLine =~ /\.appendQuery\("(.*)"\);/i)
+        ||
+        ($codeLine =~ /\.appendQuery\("(.*)$/i)
+    )
     {
         my $SQL = $1; 
         if (($sqlVar) = $codeLine =~ /([A-Za-z_][A-Za-z\d_]*)\.appendQuery/i)
@@ -207,6 +233,14 @@ sub ProcessAppendQuery()
         }
     
     }
+    # + after appendQuery
+    if ($codeLine =~ /[ \t]*\+(.*)/i)
+    {
+        if ($vQuerySQL{$CurrentQueryVariable})
+        {
+            $vQuerySQL{$CurrentQueryVariable}  .= $1;
+        }
+    }    
     
 
 }
@@ -215,9 +249,9 @@ sub ProcessAppendQuery()
 
 sub LookCurrentFunctionAndClass() {
     $codeLine = $_[0];
-    if ( ($matchClass) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]class[ \t]([A-Za-z_][A-Za-z\d_]*)/i)
+    if ( ($matchClass) = $codeLine =~ m/^[ \t]*(?:private|protected|public){1}[ \t]+(?:final[ \t]+)?class[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
     {
-        $functionName = "";
+        $CurrentFunctionName = "";
         $CurrentFunctionNameCodeLine = "";
         $CurrentClass = $matchClass;
         print("Match Class : $CurrentClass\n");
@@ -230,18 +264,22 @@ sub LookCurrentFunctionAndClass() {
         {
             $matchFunctionName = "";
             if (  #get
-                (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}[ \t]+(\b[a-zA-Z][a-zA-Z0-9\]\[<>]*\b)[ \t]+get/i)
+                (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}[ \t]+(\b[a-zA-Z][\<\>a-zA-Z0-9\]\[]+\b)[ \t]+get/i)
             ||
                 #static 
                 (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}(?:[ \t]static[ \t]){1}\b[a-zA-Z][a-zA-Z0-9\][<>]*\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i) 
             ||
-                 (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}[ \t]+\b[a-zA-Z][a-zA-Z0-9\][<>]?\b[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
-
+                 (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}[ \t]+\b[a-zA-Z][\<\>a-zA-Z0-9\]\[]+\b[ \t]+([A-Za-z_][A-Za-z0-9_]*)/i)
+            ||
+                 (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}[ \t]+\b[a-zA-Z][a-zA-Z0-9\]\b[ \t]+([A-Za-z_][A-Za-z0-9_]*)/i)
             )
             {
+            print("codeline : $codeLine");
                 ProcessFinalStuffForFunction();
-                $CurrentFunctionName = "function$lineIndex" ;
+
+                $CurrentFunctionName =  "function$lineIndex"; #  "\"$codeLine\"" ;
                 $CurrentFunctionNameCodeLine = $codeLine;
+                
                 ChangeFunction();
                 $NextIsFunctionName = 0;
             }
@@ -257,8 +295,9 @@ sub LookCurrentFunctionAndClass() {
             if (($matchFunctionName) = $codeLine =~ /(\b[A-Za-z_][A-Za-z\d_]\b)/i)
             {
               ProcessFinalStuffForFunction();
-              $CurrentFunctionName =  "function$lineIndex"; #  "\"$codeLine\"" ;
+              $CurrentFunctionName =  "function$lineIndex"; 
               $CurrentFunctionNameCodeLine = $codeLine;
+              
               ChangeFunction();
               $NextIsFunctionName = 0;
 
@@ -272,7 +311,6 @@ sub LookCurrentFunctionAndClass() {
 
 sub ChangeFunction()
 {
-
     $StartFunctionLine = $lineIndex;
     print("New Function : $CurrentFunctionName\n");
 
@@ -283,29 +321,36 @@ sub ProcessFinalStuffForFunction()
 {
     print("Process Final Stuff for Current Function : $CurrentFunctionName\n");
 
-
-    @array=keys(%vQuerySQL);
-    $size=@array;
-
-    if ($size > 0)
+    if ($IsInSQLQueryMode == 1)
     {
-        foreach my $oneSQL (keys %vQuerySQL)
+
+        @array=keys(%vQuerySQL);
+        $size=@array;
+
+        if ($size > 0)
         {
-            ScanSQLTEXT($vQuerySQL{$oneSQL});
-            print $outMapping "$vQuerySQL{$oneSQL}\n";
+            foreach my $oneSQL (keys %vQuerySQL)
+            {
+                ScanSQLTEXT($vQuerySQL{$oneSQL});
+                print $outMapping "$vQuerySQL{$oneSQL}\n";
+            }
+            
         }
-        
-        WriteToReport(0);
-        
-    }
-    else
-    {
-        @arrayQuery=keys(%vQueryVariables);
-        $size=@arrayQuery;
-        
+
+
+        #Clear stuff
+        $size = 0;
+
+        foreach my $key (keys %vQueryVariables) {
+                $size = $size + $vQueryVariables{$key};
+        }
+
         WriteToReport($size);
 
+
+
     }
+
 
     foreach my $key (keys %vQueryVariables) {
         delete $vQueryVariables{$key};
@@ -319,7 +364,13 @@ sub ProcessFinalStuffForFunction()
         $vQueryVariables{$key} = 0;
     }
 
+    foreach my $key (keys %StatisticsOfCurrentFunction) {
+         $StatisticsOfCurrentFunction{$key} = 0;
+    }
+
     $IsInSQLQueryMode = 0;
+
+    $PossibleHardCodedSQL = 0;
     
 
 
@@ -358,11 +409,16 @@ sub WriteToReport()
      $StatisticsOfCurrentFunction{SELECT},
      $StatisticsOfCurrentFunction{DELETE},
      $StatisticsOfCurrentFunction{UPDATE},
-
+     $StatisticsOfCurrentFunction{DUAL},
+     $StatisticsOfCurrentFunction{ROWID},
+     $StatisticsOfCurrentFunction{NEXTVAL},
      $StatisticsOfCurrentFunction{NOT_IN},
      $StatisticsOfCurrentFunction{NOT_EXISTS},
      $StatisticsOfCurrentFunction{CHAR1},
+     $StatisticsOfCurrentFunction{INNER_JOIN},
      $StatisticsOfCurrentFunction{NBCHAR},
+     $StatisticsOfCurrentFunction{POSSIBLE_HARDCODE_SQL},
+     
      
      
 
@@ -393,10 +449,80 @@ sub ScanSQLTEXT()
     $StatisticsOfCurrentFunction{NOT_EXISTS} = $occ;
     $occ = () = $SQLTEXT =~ /char\(1\)/gi;
     $StatisticsOfCurrentFunction{CHAR1} = $occ;
+    $occ = () = $SQLTEXT =~ /inner join/gi;
+    $StatisticsOfCurrentFunction{INNER_JOIN} = $occ;
 
     $StatisticsOfCurrentFunction{NBCHAR} = length($SQLTEXT);
+    $StatisticsOfCurrentFunction{POSSIBLE_HARDCODE_SQL} = $PossibleHardCodedSQL;
+
+
 
 }
+
+
+
+
+        
+foreach my $projectName (keys %StartDir)
+{
+
+    my @files;
+
+    find( sub { push @files, $File::Find::name unless -d; },
+    $StartDir{$projectName});
+
+    PrepareReport($projectName);
+
+    foreach my $file (@files)
+    {
+        if ($file =~ m/\.java$/)
+        {
+            $CurrentFilename = "$file";
+            ProcessFile($CurrentFilename);
+        }
+    }
+
+    CloseReport($projectName);
+}
+
+
+
+
+
+
+sub PrepareReport() {
+    
+    $reportFile = $_[0];
+    
+    $CSVfilename = "c:\\test\\decathlon\\output\\$reportFile.csv";
+    my @myField = ("Filename",  "ClassName",  "FunctionName", "VAR NB", "NVL", "NULL", "DECODE", "SYSDATE", "LISTTAG", "COUNT", "UNION", "MAX", "ESCAPE", "ROWNUM", "OVER", "INSTR", "LPAD", "UPPER", "SUM", "FIRST_VALUE", "REPLACE", "ADD_MONTHS", "OVERLAPS", "PARTITION", "SELECT", "DELETE", "UPDATE", "DUAL", "ROWID", "NEXTVAL","NOT IN", "NOT EXISTS", "CHAR(1)", "INNER JOIN", "NB_CHAR", "POSSIBLE HARDCODED SQL");
+    open $outCSV, ">:encoding(utf8)", $CSVfilename or die "failed to create $CSVfilename: $!";
+    $csv = Text::CSV->new();
+    $csv->eol ("\n");
+    my (@heading) = @myField;
+    $csv->print($outCSV, \@heading);    # Array ref!
+
+    $outMappingName = "c:\\test\\decathlon\\output\\mapping$reportFile.txt";
+    open $outMapping, ">:encoding(utf8)", $outMappingName or die "failed to create $outMappingName: $!";
+
+
+}
+
+sub CloseReport()
+{
+  
+    $reportFile = $_[0];
+  
+   if ($outCSV) {
+    close $outCSV or die "failed to close $CSVfilename: $!";     
+   }
+
+   if ($outCSV) {
+    close $outMapping or die "failed to close $reportFile: $!";     
+   }
+
+}
+
 
 
 
