@@ -17,6 +17,9 @@ local $IsInSQLQueryMode = 0;
 local $StartFunctionLine = 0;
 local $lineIndex = 0;
 local $CurrentQueryVariable = "";
+local $SizeQueryVariable = "";
+local $SizeQueryVariableCount = 0;
+
 local $csv;
 local $outCSV;
 local $fm;
@@ -26,45 +29,47 @@ local $outMappingName;
 local $PossibleHardCodedSQL = 0;
 
 local %StartDir = (
-     test => "C:\\test\\decathlon"
+#     test => "C:\\test\\decathlon"
+    decathlon => "E:\\Decathlon\\"
 );
 
-#local %StartDir = (
-#     adminFlow => "E:\\Decathlon\\adminflow",
-#     adminprod => "E:\\Decathlon\\adminprod",
-#     commonprod => "E:\\decathlon\\commonprod\\src",
-#     commonscore => "E:\\decathlon\\commonscore\\src",
-#     edbflow => "E:\\decathlon\\edbflow",
-#     apihpsaw => "E:\\decathlon\\api-hpsaw\\src",
-#     edbprod => "E:\\decathlon\\edbprod\\src",
-#     extprod => "E:\\decathlon\\extprod\\src",
-#     fdtprod => "E:\\decathlon\\fdtprod\\src",
-#     flexv4 => "E:\\decathlon\\flexv4",
-#     interfaceofferfacade => "E:\\decathlon\\interface-offerfacade",
-#     mrgprod => "E:\\decathlon\\mrgprod\\src",
-#     order => "E:\\decathlon\\order\\src",
-#     orderflow => "E:\\decathlon\\orderflow\\src",
-#     pdpconso => "E:\\decathlon\\pdpconso\\src",
-#     pilotflow => "E:\\decathlon\\pilotflow\\src",
-#     pricing => "E:\\decathlon\\pricing\\src",
-#     prodalert => "E:\\decathlon\\prodalert\\src",
-#     prodcomapi => "E:\\decathlon\\prodcom-api\\src",
-#     prodflow => "E:\\decathlon\\prodflow\\src",
-#     prodtower => "E:\\decathlon\\prodtower\\src",
-#     prodwsc => "E:\\decathlon\\prodwsc\\src",
-#     refprod => "E:\\decathlon\\refprod\\src",
-#     scorecapa => "E:\\decathlon\\scorecapa\\src",
-#     scorecapac => "E:\\decathlon\\scorecapac\\src",
-#     scoreflow => "E:\\decathlon\\scoreflow\\src",
-#     scoreflowc => "E:\\decathlon\\scoreflowc\\src",
-#     scorepdp => "E:\\decathlon\\scorepdp\\src",
-#     scorepdpc => "E:\\decathlon\\scorepdpc\\src",
-#     start => "E:\\decathlon\\start\\src",
-#     stockflow => "E:\\decathlon\\stockflow\\src",
-#     stockprod => "E:\\decathlon\\stockprod\\src"
-
-#);
-
+=begin comment
+local %StartDir = (
+     adminFlow => "E:\\Decathlon\\adminflow",
+     adminprod => "E:\\Decathlon\\adminprod",
+     commonprod => "E:\\decathlon\\commonprod\\src",
+     commonscore => "E:\\decathlon\\commonscore\\src",
+     edbflow => "E:\\decathlon\\edbflow",
+     apihpsaw => "E:\\decathlon\\api-hpsaw\\src",
+     edbprod => "E:\\decathlon\\edbprod\\src",
+     extprod => "E:\\decathlon\\extprod\\src",
+     fdtprod => "E:\\decathlon\\fdtprod\\src",
+     flexv4 => "E:\\decathlon\\flexv4",
+     interfaceofferfacade => "E:\\decathlon\\interface-offerfacade",
+     mrgprod => "E:\\decathlon\\mrgprod\\src",
+     order => "E:\\decathlon\\order\\src",
+     orderflow => "E:\\decathlon\\orderflow\\src",
+     pdpconso => "E:\\decathlon\\pdpconso\\src",
+     pilotflow => "E:\\decathlon\\pilotflow\\src",
+     pricing => "E:\\decathlon\\pricing\\src",
+     prodalert => "E:\\decathlon\\prodalert\\src",
+     prodcomapi => "E:\\decathlon\\prodcom-api\\src",
+     prodflow => "E:\\decathlon\\prodflow\\src",
+     prodtower => "E:\\decathlon\\prodtower\\src",
+     prodwsc => "E:\\decathlon\\prodwsc\\src",
+     refprod => "E:\\decathlon\\refprod\\src",
+     scorecapa => "E:\\decathlon\\scorecapa\\src",
+     scorecapac => "E:\\decathlon\\scorecapac\\src",
+     scoreflow => "E:\\decathlon\\scoreflow\\src",
+     scoreflowc => "E:\\decathlon\\scoreflowc\\src",
+     scorepdp => "E:\\decathlon\\scorepdp\\src",
+     scorepdpc => "E:\\decathlon\\scorepdpc\\src",
+     start => "E:\\decathlon\\start\\src",
+     stockflow => "E:\\decathlon\\stockflow\\src",
+     stockprod => "E:\\decathlon\\stockprod\\src"
+);
+=end comment
+=cut 
 
 local %StatisticsOfCurrentFunction = (
         NVL  => 0,
@@ -110,6 +115,8 @@ sub ProcessFile {
     $CurrentFunctionNameCodeLine = "";
     $CurrentClass = "";
     $PossibleHardCodedSQL = 0;
+    $SizeQueryVariable = 0;
+    $SizeQueryVariableCount = 0;
 
     my ($file) = $_[0];
 
@@ -126,10 +133,44 @@ sub ProcessFile {
         $lineIndex++;
         IterateLines($codeLine);       
     }
+
     ProcessFinalStuffForFunction();
 
-
+    ProcessFinalStuffForFile();
 }
+
+
+sub ProcessFinalStuffForFile()
+{
+
+    if ($SizeQueryVariable)
+    {
+        WriteToReport($SizeQueryVariable);
+    }
+
+    foreach my $key (keys %vQueryVariables) {
+        delete $vQueryVariables{$key};
+    }
+
+    foreach my $key (keys %vQuerySQL) {
+        delete $vQuerySQL{$key};
+    }
+
+    foreach my $key (keys %vQueryVariables) {
+        $vQueryVariables{$key} = 0;
+    }
+
+    foreach my $key (keys %StatisticsOfCurrentFunction) {
+         $StatisticsOfCurrentFunction{$key} = 0;
+    }
+
+
+
+
+
+    $SizeQueryVariable = 0;
+}
+
 
 sub IterateLines() {
     $codeLine = $_[0];
@@ -266,7 +307,6 @@ sub LookCurrentFunctionAndClass() {
                  (($matchFunctionName) = $codeLine =~ /^[ \t]*(?:private|protected|public){1}[ \t]+\b[a-zA-Z][a-zA-Z0-9\]\b[ \t]+([A-Za-z_][A-Za-z0-9_]*)/i)
             )
             {
-            print("codeline : $codeLine");
                 ProcessFinalStuffForFunction();
 
                 $CurrentFunctionName =  "function$lineIndex"; #  "\"$codeLine\"" ;
@@ -308,7 +348,7 @@ sub ChangeFunction()
 
 }
 
-
+=begin comment
 sub ProcessFinalStuffForFunction()
 {
     print("Process Final Stuff for Current Function : $CurrentFunctionName\n");
@@ -342,8 +382,6 @@ sub ProcessFinalStuffForFunction()
 
 
     }
-
-
     foreach my $key (keys %vQueryVariables) {
         delete $vQueryVariables{$key};
     }
@@ -368,53 +406,106 @@ sub ProcessFinalStuffForFunction()
 
 }
 
+=end comment
+=cut
+
+
+sub ProcessFinalStuffForFunction()
+{
+    print("Process Final Stuff for Current Function : $CurrentFunctionName\n");
+
+    if ($IsInSQLQueryMode == 1)
+    {
+
+        @array=keys(%vQuerySQL);
+        $size=@array;
+
+        if ($size > 0)
+        {
+            foreach my $oneSQL (keys %vQuerySQL)
+            {
+                ScanSQLTEXT($vQuerySQL{$oneSQL});
+                print $outMapping "$vQuerySQL{$oneSQL}\n";
+            }
+            
+        }
+
+
+        #Clear stuff
+        $size = 0;
+
+        foreach my $key (keys %vQueryVariables) {
+                $size = $size + $vQueryVariables{$key};
+        }
+
+        $SizeQueryVariable = $SizeQueryVariable + $size; 
+
+       
+        @array=keys(%vQueryVariables);
+        $size=@array;
+
+        $SizeQueryVariableCount = $SizeQueryVariableCount + $size; 
+
+
+    }
+
+    foreach my $key (keys %vQueryVariables) {
+        delete $vQueryVariables{$key};
+    }
+
+    $IsInSQLQueryMode = 0;
+
+   # $PossibleHardCodedSQL = 0;
+    
+
+
+}
+
+
 sub WriteToReport()
 {
     $varCount = $_[0];
 
+    my $newFilename = $CurrentFilename =~ s/\\/\//gr; 
 
     my(@datarow) = (
-     $CurrentFilename,
-     $CurrentClass,
-     $CurrentFunctionName,
-     $varCount,
-     $StatisticsOfCurrentFunction{NVL},
-     $StatisticsOfCurrentFunction{NULL},
-     $StatisticsOfCurrentFunction{DECODE},
-     $StatisticsOfCurrentFunction{SYSDATE},
-     $StatisticsOfCurrentFunction{LISTTAG},
-     $StatisticsOfCurrentFunction{COUNT},
-     $StatisticsOfCurrentFunction{UNION},
-     $StatisticsOfCurrentFunction{MAX},
-     $StatisticsOfCurrentFunction{ESCAPE},
-     $StatisticsOfCurrentFunction{ROWNUM},
-     $StatisticsOfCurrentFunction{OVER},
-     $StatisticsOfCurrentFunction{INSTR},
-     $StatisticsOfCurrentFunction{LPAD},
-     $StatisticsOfCurrentFunction{UPPER},
-     $StatisticsOfCurrentFunction{SUM},
-     $StatisticsOfCurrentFunction{FIRST_VALUE},
-     $StatisticsOfCurrentFunction{REPLACE},
-     $StatisticsOfCurrentFunction{ADD_MONTHS},
-     $StatisticsOfCurrentFunction{OVERLAPS},
-     $StatisticsOfCurrentFunction{PARTITION},
-     $StatisticsOfCurrentFunction{SELECT},
-     $StatisticsOfCurrentFunction{DELETE},
-     $StatisticsOfCurrentFunction{UPDATE},
-     $StatisticsOfCurrentFunction{DUAL},
-     $StatisticsOfCurrentFunction{ROWID},
-     $StatisticsOfCurrentFunction{NEXTVAL},
-     $StatisticsOfCurrentFunction{NOT_IN},
-     $StatisticsOfCurrentFunction{NOT_EXISTS},
-     $StatisticsOfCurrentFunction{CHAR1},
-     $StatisticsOfCurrentFunction{INNER_JOIN},
-     $StatisticsOfCurrentFunction{NBCHAR},
-     $StatisticsOfCurrentFunction{POSSIBLE_HARDCODE_SQL},
-     
-     
-     
-
-
+        $newFilename,
+    #    $CurrentClass,
+    #     $CurrentFunctionName,
+        $varCount,
+        $SizeQueryVariableCount,
+        $StatisticsOfCurrentFunction{NVL},
+        $StatisticsOfCurrentFunction{NULL},
+        $StatisticsOfCurrentFunction{DECODE},
+        $StatisticsOfCurrentFunction{SYSDATE},
+        $StatisticsOfCurrentFunction{LISTTAG},
+        $StatisticsOfCurrentFunction{COUNT},
+        $StatisticsOfCurrentFunction{UNION},
+        $StatisticsOfCurrentFunction{MAX},
+        $StatisticsOfCurrentFunction{ESCAPE},
+        $StatisticsOfCurrentFunction{ROWNUM},
+        $StatisticsOfCurrentFunction{OVER},
+        $StatisticsOfCurrentFunction{INSTR},
+        $StatisticsOfCurrentFunction{LPAD},
+        $StatisticsOfCurrentFunction{UPPER},
+        $StatisticsOfCurrentFunction{SUM},
+        $StatisticsOfCurrentFunction{FIRST_VALUE},
+        $StatisticsOfCurrentFunction{REPLACE},
+        $StatisticsOfCurrentFunction{ADD_MONTHS},
+        $StatisticsOfCurrentFunction{OVERLAPS},
+        $StatisticsOfCurrentFunction{PARTITION},
+        $StatisticsOfCurrentFunction{SELECT},
+        $StatisticsOfCurrentFunction{DELETE},
+        $StatisticsOfCurrentFunction{UPDATE},
+        $StatisticsOfCurrentFunction{DUAL},
+        $StatisticsOfCurrentFunction{ROWID},
+        $StatisticsOfCurrentFunction{NEXTVAL},
+        $StatisticsOfCurrentFunction{NOT_IN},
+        $StatisticsOfCurrentFunction{NOT_EXISTS},
+        $StatisticsOfCurrentFunction{CHAR1},
+        $StatisticsOfCurrentFunction{JOIN},
+        $StatisticsOfCurrentFunction{NBCHAR},
+        $StatisticsOfCurrentFunction{POSSIBLE_HARDCODE_SQL},
       );
 
     if ($outCSV)
@@ -424,6 +515,7 @@ sub WriteToReport()
     
 }
 
+=begin comment
 sub ScanSQLTEXT()
 {
     $SQLTEXT = $_[0];
@@ -451,10 +543,37 @@ sub ScanSQLTEXT()
 
 }
 
+=end COMMENT
+=cut
+
+sub ScanSQLTEXT()
+{
+    $SQLTEXT = $_[0];
+    
+    my $occ;
+    foreach my $statistic (keys %StatisticsOfCurrentFunction)
+    {
+        $occ = () = $SQLTEXT =~ /\b$statistic\b/gi;
+        $StatisticsOfCurrentFunction{$statistic} = $StatisticsOfCurrentFunction{$statistic} + $occ;
+    }
+
+    $occ = () = $SQLTEXT =~ /NOT IN/gi;
+    $StatisticsOfCurrentFunction{NOT_IN} = $StatisticsOfCurrentFunction{NOT_IN} + $occ;
+    $occ = () = $SQLTEXT =~ /NOT EXISTS/gi;
+    $StatisticsOfCurrentFunction{NOT_EXISTS} = $StatisticsOfCurrentFunction{NOT_EXISTS} + $occ;
+    $occ = () = $SQLTEXT =~ /char\(1\)/gi;
+    $StatisticsOfCurrentFunction{CHAR1} = $StatisticsOfCurrentFunction{CHAR1} + $occ;
+    $occ = () = $SQLTEXT =~ /join/gi;
+    $StatisticsOfCurrentFunction{JOIN} = $StatisticsOfCurrentFunction{JOIN} + $occ;
+
+    $SQLTEXT =~ s/^\s+|\s+$//g;
+    $StatisticsOfCurrentFunction{NBCHAR} = $StatisticsOfCurrentFunction{NBCHAR} + length($SQLTEXT);
+    $StatisticsOfCurrentFunction{POSSIBLE_HARDCODE_SQL} = $PossibleHardCodedSQL;
+
+}
 
 
 
-        
 foreach my $projectName (keys %StartDir)
 {
 
@@ -487,7 +606,8 @@ sub PrepareReport() {
     $reportFile = $_[0];
     
     $CSVfilename = "c:\\test\\decathlon\\output\\$reportFile.csv";
-    my @myField = ("Filename",  "ClassName",  "FunctionName", "VAR NB", "NVL", "NULL", "DECODE", "SYSDATE", "LISTTAG", "COUNT", "UNION", "MAX", "ESCAPE", "ROWNUM", "OVER", "INSTR", "LPAD", "UPPER", "SUM", "FIRST_VALUE", "REPLACE", "ADD_MONTHS", "OVERLAPS", "PARTITION", "SELECT", "DELETE", "UPDATE", "DUAL", "ROWID", "NEXTVAL","NOT IN", "NOT EXISTS", "CHAR(1)", "INNER JOIN", "NB_CHAR", "POSSIBLE HARDCODED SQL");
+#    my @myField = ("Filename",  "ClassName",  "FunctionName", "VAR NB", "NVL", "NULL", "DECODE", "SYSDATE", "LISTTAG", "COUNT", "UNION", "MAX", "ESCAPE", "ROWNUM", "OVER", "INSTR", "LPAD", "UPPER", "SUM", "FIRST_VALUE", "REPLACE", "ADD_MONTHS", "OVERLAPS", "PARTITION", "SELECT", "DELETE", "UPDATE", "DUAL", "ROWID", "NEXTVAL","NOT IN", "NOT EXISTS", "CHAR(1)", "INNER JOIN", "NB_CHAR", "POSSIBLE HARDCODED SQL");
+    my @myField = ("Filename", "VAR TOTAL", "VAR COUNT", "NVL", "NULL", "DECODE", "SYSDATE", "LISTTAG", "COUNT", "UNION", "MAX", "ESCAPE", "ROWNUM", "OVER", "INSTR", "LPAD", "UPPER", "SUM", "FIRST_VALUE", "REPLACE", "ADD_MONTHS", "OVERLAPS", "PARTITION", "SELECT", "DELETE", "UPDATE", "DUAL", "ROWID", "NEXTVAL","NOT IN", "NOT EXISTS", "CHAR(1)", "JOIN", "NB_CHAR", "POSSIBLE HARDCODED SQL");
     open $outCSV, ">:encoding(utf8)", $CSVfilename or die "failed to create $CSVfilename: $!";
     $csv = Text::CSV->new();
     $csv->eol ("\n");
