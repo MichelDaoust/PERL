@@ -25,54 +25,45 @@ local $outMapping;
 local $outMappingName;
 local $PossibleHardCodedSQL = 0;
 
-
-
 local %StartDir = (
-     adminFlow => "E:\\Decathlon\\adminflow",
-     adminprod => "E:\\Decathlon\\adminprod",
-     commonprod => "E:\\decathlon\\commonprod\\src",
-     commonscore => "E:\\decathlon\\commonscore\\src",
-     edbflow => "E:\\decathlon\\edbflow",
-     apihpsaw => "E:\\decathlon\\api-hpsaw\\src",
-     edbprod => "E:\\decathlon\\edbprod\\src",
-     extprod => "E:\\decathlon\\extprod\\src",
-     fdtprod => "E:\\decathlon\\fdtprod\\src",
-     flexv4 => "E:\\decathlon\\flexv4",
-     interfaceofferfacade => "E:\\decathlon\\interface-offerfacade",
-     mrgprod => "E:\\decathlon\\mrgprod\\src",
-     order => "E:\\decathlon\\order\\src",
-     orderflow => "E:\\decathlon\\orderflow\\src",
-     pdpconso => "E:\\decathlon\\pdpconso\\src",
-     pilotflow => "E:\\decathlon\\pilotflow\\src",
-     pricing => "E:\\decathlon\\pricing\\src",
-     prodalert => "E:\\decathlon\\prodalert\\src",
-     prodcomapi => "E:\\decathlon\\prodcom-api\\src",
-     prodflow => "E:\\decathlon\\prodflow\\src",
-     prodtower => "E:\\decathlon\\prodtower\\src",
-     prodwsc => "E:\\decathlon\\prodwsc\\src",
-     refprod => "E:\\decathlon\\refprod\\src",
-     scorecapa => "E:\\decathlon\\scorecapa\\src",
-     scorecapac => "E:\\decathlon\\scorecapac\\src",
-     scoreflow => "E:\\decathlon\\scoreflow\\src",
-     scoreflowc => "E:\\decathlon\\scoreflowc\\src",
-     scorepdp => "E:\\decathlon\\scorepdp\\src",
-     scorepdpc => "E:\\decathlon\\scorepdpc\\src",
-     start => "E:\\decathlon\\start\\src",
-     stockflow => "E:\\decathlon\\stockflow\\src",
-     stockprod => "E:\\decathlon\\stockprod\\src"
-
-
-     
-
-
-     
-
-
-
-
-
-
+     test => "C:\\test\\decathlon"
 );
+
+#local %StartDir = (
+#     adminFlow => "E:\\Decathlon\\adminflow",
+#     adminprod => "E:\\Decathlon\\adminprod",
+#     commonprod => "E:\\decathlon\\commonprod\\src",
+#     commonscore => "E:\\decathlon\\commonscore\\src",
+#     edbflow => "E:\\decathlon\\edbflow",
+#     apihpsaw => "E:\\decathlon\\api-hpsaw\\src",
+#     edbprod => "E:\\decathlon\\edbprod\\src",
+#     extprod => "E:\\decathlon\\extprod\\src",
+#     fdtprod => "E:\\decathlon\\fdtprod\\src",
+#     flexv4 => "E:\\decathlon\\flexv4",
+#     interfaceofferfacade => "E:\\decathlon\\interface-offerfacade",
+#     mrgprod => "E:\\decathlon\\mrgprod\\src",
+#     order => "E:\\decathlon\\order\\src",
+#     orderflow => "E:\\decathlon\\orderflow\\src",
+#     pdpconso => "E:\\decathlon\\pdpconso\\src",
+#     pilotflow => "E:\\decathlon\\pilotflow\\src",
+#     pricing => "E:\\decathlon\\pricing\\src",
+#     prodalert => "E:\\decathlon\\prodalert\\src",
+#     prodcomapi => "E:\\decathlon\\prodcom-api\\src",
+#     prodflow => "E:\\decathlon\\prodflow\\src",
+#     prodtower => "E:\\decathlon\\prodtower\\src",
+#     prodwsc => "E:\\decathlon\\prodwsc\\src",
+#     refprod => "E:\\decathlon\\refprod\\src",
+#     scorecapa => "E:\\decathlon\\scorecapa\\src",
+#     scorecapac => "E:\\decathlon\\scorecapac\\src",
+#     scoreflow => "E:\\decathlon\\scoreflow\\src",
+#     scoreflowc => "E:\\decathlon\\scoreflowc\\src",
+#     scorepdp => "E:\\decathlon\\scorepdp\\src",
+#     scorepdpc => "E:\\decathlon\\scorepdpc\\src",
+#     start => "E:\\decathlon\\start\\src",
+#     stockflow => "E:\\decathlon\\stockflow\\src",
+#     stockprod => "E:\\decathlon\\stockprod\\src"
+
+#);
 
 
 local %StatisticsOfCurrentFunction = (
@@ -215,23 +206,24 @@ sub ProcessAppendQuery()
     $codeLine = $_[0];
 
     if (
-        ($codeLine =~ /\.appendQuery\("(.*)"\);/i)
+        ($codeLine =~ /\.(?:appendQuery|appendToQuery)\("(.*)"\);/i)
         ||
         ($codeLine =~ /\.appendQuery\("(.*)$/i)
+        ||
+        ($codeLine =~ /\.appendToQuery\("(.*)$/i)
+
     )
     {
         my $SQL = $1; 
-        if (($sqlVar) = $codeLine =~ /([A-Za-z_][A-Za-z\d_]*)\.appendQuery/i)
+        if (($sqlVar) = $codeLine =~ /([A-Za-z_][A-Za-z\d_]*)\.(?:appendQuery|appendToQuery)/i)
         {
-
             $vQuerySQL{$sqlVar}  .= $SQL;
         }
-        else
+        else        
         {
             $vQuerySQL{$CurrentQueryVariable}  .= $SQL;
 
         }
-    
     }
     # + after appendQuery
     if ($codeLine =~ /[ \t]*\+(.*)/i)
