@@ -19,6 +19,8 @@ local $lineIndex = 0;
 local $CurrentQueryVariable = "";
 local $SizeQueryVariable = "";
 local $SizeQueryVariableCount = 0;
+local $SQLSqueryWithSQLCount = 0;
+
 
 local $csv;
 local $outCSV;
@@ -29,7 +31,7 @@ local $outMappingName;
 local $PossibleHardCodedSQL = 0;
 
 local %StartDir = (
-#     test => "C:\\test\\decathlon"
+#     test => "c:\\test\\decathlon"
     decathlon => "E:\\Decathlon\\"
 );
 
@@ -182,7 +184,7 @@ sub IterateLines() {
 sub ScanSQLQueryObject()
 {
     $codeLine = $_[0];
-    if ( ($sqlQueryVariable) = $codeLine =~ /^[ \t]*(?:final)?[ \t]*(?:SqlQuery){1}[ \t]+([A-Za-z_][A-Za-z\d_]*)/i)
+    if ( ($sqlQueryVariable) = $codeLine =~ /^[ \t]*(?:final)?[ \t]*(?:SqlQuery){1}[ \t]+([A-Za-z_][A-Za-z\d_]*[ \t]*=)/i)
     {
         $vQueryVariables{$sqlQueryVariable} = 1;
         $IsInSQLQueryMode = 1;
@@ -247,15 +249,15 @@ sub ProcessAppendQuery()
     $codeLine = $_[0];
 
     if (
-        ($codeLine =~ /\.(?:appendQuery|appendToQuery)\("(.*)"\);/i)
+        ($codeLine =~ /\.(?:appendQuery|appendToQuery)\([ \t]*"(.*)"[ \t]*\);/i)
         ||
-        ($codeLine =~ /\.appendQuery\("(.*)$/i)
+        ($codeLine =~ /\.appendQuery\("[ \t]*(.*)[ \t]*$/i)
         ||
-        ($codeLine =~ /\.appendToQuery\("(.*)$/i)
+        ($codeLine =~ /\.appendToQuery\("[ \t]*(.*)[ \t]*$/i)
 
     )
     {
-        my $SQL = $1; 
+        my $SQL = $1  =~ s/[ \t]+/ /gr; 
         if (($sqlVar) = $codeLine =~ /([A-Za-z_][A-Za-z\d_]*)\.(?:appendQuery|appendToQuery)/i)
         {
             $vQuerySQL{$sqlVar}  .= $SQL;
@@ -265,16 +267,25 @@ sub ProcessAppendQuery()
             $vQuerySQL{$CurrentQueryVariable}  .= $SQL;
 
         }
+
     }
-    # + after appendQuery
-    if ($codeLine =~ /[ \t]*\+(.*)/i)
+    elsif ($codeLine =~ /^[ \t]*\+(.*)[ \t]*/i)
     {
-        if ($vQuerySQL{$CurrentQueryVariable})
-        {
-            $vQuerySQL{$CurrentQueryVariable}  .= $1;
-        }
-    }    
-    
+        # + after appendQuery
+            if ($vQuerySQL{$CurrentQueryVariable})
+            {
+                $vQuerySQL{$CurrentQueryVariable}  .= $1 =~ s/[ \t]+/ /gr; 
+            }
+    }
+    elsif (($codeLine =~ /[ \t]*[A-Za-z_][A-Za-z\d_]*\.append\([ \t]*"(.*)"[ \t]*\);/i) && (($vQuerySQL{$CurrentQueryVariable})))
+    {
+        # + possible string builder
+        $vQuerySQL{$CurrentQueryVariable}  .= $1  =~ s/[ \t]+/ /gr;
+    }
+    else
+    {
+            #do nothing
+    }
 
 }
 
@@ -422,8 +433,11 @@ sub ProcessFinalStuffForFunction()
 
         if ($size > 0)
         {
+
             foreach my $oneSQL (keys %vQuerySQL)
             {
+                $SQLSqueryWithSQLCount = $SQLSqueryWithSQLCount + 1;                 
+                                
                 ScanSQLTEXT($vQuerySQL{$oneSQL});
                 print $outMapping "$vQuerySQL{$oneSQL}\n";
             }
@@ -445,6 +459,10 @@ sub ProcessFinalStuffForFunction()
         $size=@array;
 
         $SizeQueryVariableCount = $SizeQueryVariableCount + $size; 
+
+        foreach my $key (keys %vQuerySQL) {
+            delete $vQuerySQL{$key};
+    }
 
 
     }
@@ -515,6 +533,19 @@ sub WriteToReport()
     
 }
 
+sub WriteEndReport()
+{
+    my(@datarow) = (
+        $SQLSqueryWithSQLCount
+      );
+
+    if ($outCSV)
+    {
+        $csv->print($outCSV, \@datarow);    # Array ref!
+    }
+    
+}
+
 =begin comment
 sub ScanSQLTEXT()
 {
@@ -554,28 +585,37 @@ sub ScanSQLTEXT()
     foreach my $statistic (keys %StatisticsOfCurrentFunction)
     {
         $occ = () = $SQLTEXT =~ /\b$statistic\b/gi;
+        print("Statistic : $statistic\n");
         $StatisticsOfCurrentFunction{$statistic} = $StatisticsOfCurrentFunction{$statistic} + $occ;
     }
 
-    $occ = () = $SQLTEXT =~ /NOT IN/gi;
-    $StatisticsOfCurrentFunction{NOT_IN} = $StatisticsOfCurrentFunction{NOT_IN} + $occ;
-    $occ = () = $SQLTEXT =~ /NOT EXISTS/gi;
-    $StatisticsOfCurrentFunction{NOT_EXISTS} = $StatisticsOfCurrentFunction{NOT_EXISTS} + $occ;
-    $occ = () = $SQLTEXT =~ /char\(1\)/gi;
-    $StatisticsOfCurrentFunction{CHAR1} = $StatisticsOfCurrentFunction{CHAR1} + $occ;
-    $occ = () = $SQLTEXT =~ /join/gi;
-    $StatisticsOfCurrentFunction{JOIN} = $StatisticsOfCurrentFunction{JOIN} + $occ;
+    if (!exists $StatisticsOfCurrentFunction{NOT_IN})
+    {
+        $occ = () = $SQLTEXT =~ /\bNOT IN\b/gi;
+        $StatisticsOfCurrentFunction{NOT_IN} = $StatisticsOfCurrentFunction{NOT_IN} + $occ;
+    }
+    if (!exists $StatisticsOfCurrentFunction{NOT_EXISTS})
+    {
+        $occ = () = $SQLTEXT =~ /\bNOT EXISTS\b/gi;
+        $StatisticsOfCurrentFunction{NOT_EXISTS} = $StatisticsOfCurrentFunction{NOT_EXISTS} + $occ;
+    }
+    if (!exists $StatisticsOfCurrentFunction{JOIN})
+    {
+        $occ = () = $SQLTEXT =~ /\bjoin\b/gi;
+        $StatisticsOfCurrentFunction{JOIN} = $StatisticsOfCurrentFunction{JOIN} + $occ;
+    }
 
     $SQLTEXT =~ s/^\s+|\s+$//g;
     $StatisticsOfCurrentFunction{NBCHAR} = $StatisticsOfCurrentFunction{NBCHAR} + length($SQLTEXT);
     $StatisticsOfCurrentFunction{POSSIBLE_HARDCODE_SQL} = $PossibleHardCodedSQL;
-
 }
 
 
 
 foreach my $projectName (keys %StartDir)
 {
+
+    $SQLSqueryWithSQLCount = 0;
 
     my @files;
 
@@ -592,6 +632,7 @@ foreach my $projectName (keys %StartDir)
             ProcessFile($CurrentFilename);
         }
     }
+    WriteEndReport();    
 
     CloseReport($projectName);
 }
